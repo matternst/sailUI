@@ -230,4 +230,3 @@ if __name__ == "__main__":
         sys.exit(app.exec())
     finally:
         mock_n2k_instance.stop()
-
