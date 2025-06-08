@@ -3,8 +3,8 @@ from PySide6.QtWidgets import (
     QWidget, QGridLayout, QVBoxLayout, QLabel, QGraphicsView, QGraphicsScene,
     QGraphicsLineItem, QStackedWidget
 )
-from PySide6.QtCore import Qt, QRectF, Slot
-from PySide6.QtGui import QColor, QPen, QFont, QPainter, QPainterPath
+from PySide6.QtCore import Qt, QRectF, Slot, Signal
+from PySide6.QtGui import QColor, QPen, QFont, QPainter, QPainterPath, QKeyEvent
 
 # Define color palettes for easy management
 DARK_THEME = {
@@ -29,12 +29,9 @@ LIGHT_THEME = {
 class StandardSailView(QWidget):
     def __init__(self):
         super().__init__()
-        # ... (The entire layout creation from the previous step goes here)
-        # ... (I'm omitting it for brevity, but it's unchanged)
-        # The following is the full __init__ content from before
+        # This section is unchanged
         main_grid_layout = QGridLayout(self)
         main_grid_layout.setContentsMargins(0, 20, 40, 20)
-        # main_grid_layout.setContentsMargins(Left, Top, Right, Bottom)
         main_grid_layout.setSpacing(10)
 
         # --- Left Section: Wind Display ---
@@ -113,14 +110,12 @@ class StandardSailView(QWidget):
         right_column_layout.addStretch(1)
         main_grid_layout.addLayout(right_column_layout, 0, 1, 2, 1)
         
-        # Set initial theme to dark
         self.setTheme(False)
 
     @Slot(bool)
     def setTheme(self, is_light_mode):
         theme = LIGHT_THEME if is_light_mode else DARK_THEME
         
-        # Update stylesheets for labels
         self.depth_title_label.setStyleSheet(f"font-family: Oxanium; font-size: 20px; color: {theme['text_secondary']}; font-weight: bold;")
         self.depth_value_label.setStyleSheet(f"font-family: Oxanium; font-size: 70px; color: {theme['text_primary']}; font-weight: bold;")
         self.depth_unit_label.setStyleSheet(f"font-family: Oxanium; font-size: 20px; color: {theme['text_secondary']}; font-weight: bold;")
@@ -128,26 +123,21 @@ class StandardSailView(QWidget):
         self.speed_value_label.setStyleSheet(f"font-family: Oxanium; font-size: 70px; color: {theme['text_primary']}; font-weight: bold;")
         self.speed_unit_label.setStyleSheet(f"font-family: Oxanium; font-size: 20px; color: {theme['text_secondary']}; font-weight: bold;")
 
-        # Update pen/color for graphics items
         self.boat_item.setPen(QPen(theme['boat'], 3))
         self.wind_direction_arrow.setPen(QPen(theme['arrow'], 8, Qt.SolidLine, Qt.RoundCap))
         self.boat_wind_speed_text.setDefaultTextColor(QColor(theme['text_primary']))
         self.wind_speed_unit_text.setDefaultTextColor(QColor(theme['text_secondary']))
 
-    # ... data update slots (update_wind_display, etc.) are unchanged ...
     @Slot(float, float, str)
     def update_wind_display(self, speed_mps, angle_rad, reference):
         speed_knots = speed_mps * 1.94384
         self.boat_wind_speed_text.setPlainText(f"{speed_knots:.0f}")
         y_offset = 10 
-        # Center the main speed number and apply the offset
         current_speed_num_rect = self.boat_wind_speed_text.boundingRect()
         self.boat_wind_speed_text.setPos(
             -current_speed_num_rect.width() / 2,
             -current_speed_num_rect.height() / 2 + y_offset
         )
-
-        # Position the "kts" unit below the speed number and apply the same offset
         kts_unit_rect = self.wind_speed_unit_text.boundingRect()
         kts_y_pos = current_speed_num_rect.height() / 2 + 5
         self.wind_speed_unit_text.setPos(
@@ -167,7 +157,6 @@ class StandardSailView(QWidget):
     def update_speed_display(self, speed_knots):
         self.speed_value_label.setText(f"{speed_knots:.1f}")
 
-# ... RacingView class is unchanged ...
 class RacingView(QWidget):
     def __init__(self):
         super().__init__()
@@ -176,10 +165,14 @@ class RacingView(QWidget):
         label.setAlignment(Qt.AlignCenter)
         label.setStyleSheet("font-size: 30px; font-family: Oxanium;")
         layout.addWidget(label)
+
 # -----------------------------------------------------------------------------
 # The Main UI container that manages the different views
 # -----------------------------------------------------------------------------
 class SailUI(QWidget):
+    # Signal to be emitted when the Escape key is pressed
+    escape_pressed = Signal()
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Sail UI Display")
@@ -196,8 +189,15 @@ class SailUI(QWidget):
         
         self.main_layout.addWidget(self.stacked_widget)
         
-        # Set initial theme
         self.setTheme(False)
+
+    def keyPressEvent(self, event: QKeyEvent):
+        """Handle key press events to exit on Escape."""
+        if event.key() == Qt.Key.Key_Escape:
+            self.escape_pressed.emit()
+        else:
+            # Pass other key events to the parent class to handle
+            super().keyPressEvent(event)
 
     @Slot(int)
     def setView(self, index):
@@ -208,9 +208,7 @@ class SailUI(QWidget):
     def setTheme(self, is_light_mode):
         theme = LIGHT_THEME if is_light_mode else DARK_THEME
         self.setStyleSheet(f"background-color: {theme['bg']};")
-        # Pass the theme command to the appropriate views
         self.standard_view.setTheme(is_light_mode)
-        # self.racing_view.setTheme(is_light_mode) # You would add this if RacingView had themes
 
     # --- Data Passthrough Slots ---
     @Slot(float, float, str)
