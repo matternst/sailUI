@@ -59,8 +59,7 @@ class MainApplication:
              self.sail_ui.move(primary_screen.geometry().topLeft())
 
         if self.dashboard_ui:
-            # self.dashboard_ui.show()
-            self.sail_ui.showFullScreen()
+            self.dashboard_ui.show()
 
             if secondary_screen:
                 # If a second screen exists, move the dashboard there
