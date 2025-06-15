@@ -51,13 +51,17 @@ class MainApplication:
         self.dashboard_ui.escape_pressed.connect(self.app.quit)
 
         # --- Show Windows on Appropriate Screens ---
-        self.sail_ui.show()
+        # self.sail_ui.show()
+        self.sail_ui.showFullScreen()
+
         if primary_screen:
              # Move the main UI to the primary screen
              self.sail_ui.move(primary_screen.geometry().topLeft())
 
         if self.dashboard_ui:
-            self.dashboard_ui.show()
+            # self.dashboard_ui.show()
+            self.sail_ui.showFullScreen()
+
             if secondary_screen:
                 # If a second screen exists, move the dashboard there
                 self.dashboard_ui.move(secondary_screen.geometry().topLeft())
