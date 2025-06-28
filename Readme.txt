@@ -19,28 +19,90 @@ To view your Python app in its standalone window, you need to first activate you
 Here are the terminal commands:
 
 Navigate to your project directory:
-Bash
 
+Bash:
 cd ~/Sites/SailUI
+
 (This assumes your project folder is SailUI inside your Sites directory.)
 
 Activate your Python virtual environment:
 
-Bash
-
+Bash:
 source venv/bin/activate
+
 You'll know it's active when your terminal prompt shows (venv) at the beginning, like (venv) matthewernst-mac:SailUI matthewernst$.
 
 Run your main application script:
 
-Bash
-
+Bash:
 python main_app.py
 
 
 - - - - - - - - - - - - - - - - - - - - - - - 
 
 SSH ONTO RASBERRY PI 
+
+- - - - - - - - - - - - - - - - - - - - - - - 
+
+
+FAKE DATA: To Start with Fake Data (for UI Testing)
+Navigate to the project directory:
+
+Bash:
+cd ~/sailui
+
+Activate the virtual environment:
+
+Bash:
+source venv/bin/activate
+
+Run the application, telling it to appear on your monitor:
+
+Bash:
+DISPLAY=:0 python main_app.py
+
+- - 
+
+REAL DATA: To Start with Real Data (from CAN HAT)
+Use these commands when you have your CAN hardware connected and want to see live data.
+
+Navigate to the project directory:
+
+Bash:
+cd ~/sailui
+
+Activate the can0 hardware interface. (This is required after every reboot).
+
+Bash:
+sudo ip link set can0 up type can bitrate 250000
+
+Activate the virtual environment:
+
+Bash:
+source venv/bin/activate
+
+Run the application, telling it to appear on your monitor:
+
+Bash:
+DISPLAY=:0 python main_app.py
+
+
+- - 
+
+To kill the app
+
+Bash:
+cd ~/sailui
+
+
+
+bash:
+sudo pkill -f main_app.py
+
+
+- - - - - - - - - - - - - - - - - - - - - - - 
+
+INSTAL AND SETUP
 
 - - - - - - - - - - - - - - - - - - - - - - - 
 
@@ -148,6 +210,7 @@ Add the following content to the script. This ensures the correct environment is
 Bash
 
 #!/bin/bash
+sleep 3
 cd /home/matternst/sailui
 source venv/bin/activate
 python main_app.py
@@ -240,3 +303,193 @@ Bash
 
 # Correct format
 ssh your_username@your_pi_ip_address
+
+
+
+
+
+
+
+- - - - - - - - - - - - - - - - - - - - - - - 
+
+SETUP eINK monitor
+
+- - - - - - - - - - - - - - - - - - - - - - - 
+
+
+1. Enable SPI on your Raspberry Pi
+First, you need to enable the SPI interface on your Raspberry Pi, which the e-ink display uses to communicate.
+
+Open a terminal on your Raspberry Pi and run sudo raspi-config.
+
+Navigate to Interfacing Options > SPI.
+
+Select Yes to enable the SPI interface.
+
+Reboot your Raspberry Pi.
+
+2. Install the Waveshare E-Paper Library
+Next, you'll need to install the Python library to control the e-ink display.
+
+Clone the Waveshare e-Paper GitHub repository:
+
+Bash
+
+git clone https://github.com/waveshare/e-Paper.git
+Install the necessary Python libraries:
+
+Bash
+
+sudo apt-get update
+sudo apt-get install python3-pip python3-pil python3-numpy
+sudo pip3 install RPi.GPIO spidev
+3. Create a New E-Paper Display File
+To keep your code organized, create a new file named epaper_display.py in the same directory as your other SailUI files. This file will handle the communication with the e-ink display.
+
+Python
+
+# epaper_display.py
+
+import sys
+import os
+from PIL import Image
+from waveshare_epd import epd7in5_V2
+
+class EpaperDisplay:
+    def __init__(self):
+        self.epd = epd7in5_V2.EPD()
+        self.epd.init()
+        self.epd.Clear()
+
+    def display_image(self, image):
+        # Create a new image with a white background
+        black_image = Image.new('1', (self.epd.width, self.epd.height), 255)
+        
+        # Paste the provided image onto the white background
+        black_image.paste(image, (0,0))
+        
+        # Display the image on the e-paper display
+        self.epd.display(self.epd.getbuffer(black_image))
+
+    def clear(self):
+        self.epd.Clear()
+
+    def sleep(self):
+        self.epd.sleep()
+4. Modify main_app.py
+Now, you need to modify your main_app.py file to render the SailUI to an image and send it to the e-ink display.
+
+Python
+
+# main_app.py
+
+import sys
+from PySide6.QtWidgets import QApplication
+from PySide6.QtGui import QPixmap
+from PySide6.QtCore import QTimer
+
+# Make sure all your custom modules are imported
+from nmea_reader import NMEA2000Reader
+from sail_ui import SailUI
+from dashboard_ui import DashboardUI
+from bluetooth_manager import BluetoothManager
+from epaper_display import EpaperDisplay # Import the new EpaperDisplay class
+
+class MainApplication:
+    def __init__(self):
+        """Initializes the main application, UI windows, and connections."""
+        self.app = QApplication(sys.argv)
+
+        # --- Screen Detection ---
+        screens = self.app.screens()
+        primary_screen = self.app.primaryScreen()
+        secondary_screen = None
+        if len(screens) > 1:
+            for screen in screens:
+                if screen != primary_screen:
+                    secondary_screen = screen
+                    break
+
+        # --- Initialize Core Components & UI ---
+        self.nmea_thread = NMEA2000Reader()
+        self.bt_manager = BluetoothManager()
+        self.sail_ui = SailUI()
+        self.dashboard_ui = DashboardUI()
+        
+        # --- Initialize E-Paper Display ---
+        self.epaper = EpaperDisplay()
+
+        # --- Connect Signals and Slots ---
+        # (Your existing signal and slot connections remain the same)
+        self.nmea_thread.wind_data_received.connect(self.sail_ui.update_wind_display)
+        self.nmea_thread.depth_data_received.connect(self.sail_ui.update_depth_display)
+        self.nmea_thread.speed_data_received.connect(self.sail_ui.update_speed_display)
+        
+        self.dashboard_ui.view_changed.connect(self.sail_ui.setView)
+        self.dashboard_ui.theme_changed.connect(self.sail_ui.setTheme)
+        
+        self.dashboard_ui.discoverable_clicked.connect(self.bt_manager.make_discoverable)
+        self.bt_manager.connection_status_changed.connect(self.dashboard_ui.update_bluetooth_status)
+
+        self.dashboard_ui.exit_app_clicked.connect(self.app.quit)
+
+        self.sail_ui.escape_pressed.connect(self.app.quit)
+        self.dashboard_ui.escape_pressed.connect(self.app.quit)
+
+        # --- Show Windows ---
+        # The dashboard will now be the primary UI on the main monitor
+        self.dashboard_ui.show()
+
+        if primary_screen:
+            self.dashboard_ui.move(primary_screen.geometry().topLeft())
+        
+        # --- Timer to update the e-paper display ---
+        self.update_timer = QTimer()
+        self.update_timer.timeout.connect(self.update_epaper_display)
+        self.update_timer.start(5000) # Update every 5 seconds
+
+        # Start reading NMEA data
+        self.nmea_thread.start()
+
+    def update_epaper_display(self):
+        """Renders the SailUI to an image and displays it on the e-paper."""
+        pixmap = QPixmap(self.sail_ui.size())
+        self.sail_ui.render(pixmap)
+        
+        # Convert QPixmap to PIL Image
+        qimage = pixmap.toImage()
+        buffer = qimage.bits().tobytes()
+        pil_image = Image.frombytes("RGBA", (qimage.width(), qimage.height()), buffer, 'raw', "RGBA")
+        
+        # Display the image
+        self.epaper.display_image(pil_image)
+
+
+    def run(self):
+        """Executes the application's main loop."""
+        return self.app.exec()
+
+    def cleanup(self):
+        """Stops background threads and clears the e-paper display."""
+        print("Cleaning up and stopping threads...")
+        self.nmea_thread.stop()
+        self.epaper.clear()
+        self.epaper.sleep()
+
+
+if __name__ == "__main__":
+    main_app = MainApplication()
+    exit_code = main_app.run()
+    main_app.cleanup()
+    sys.exit(exit_code)
+5. Run the Application
+Now you are ready to run your updated SailUI application.
+
+Make sure you are in the sailui directory and have your virtual environment activated.
+
+Run the main application:
+
+Bash
+
+python main_app.py
+Your dashboard_ui should appear on your primary monitor, and the sail_ui should now be displayed on your new e-ink monitor, updating every 5 seconds.

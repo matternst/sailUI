@@ -35,6 +35,9 @@ class MockNMEA2000:
         self.last_gps_time = time.time()
         self.last_gps_pos = (math.radians(self.gps_latitude_deg), math.radians(self.gps_longitude_deg))
 
+         # --- NEW: Simulated Pressure Data ---
+        self.pressure_pa = 101325.0 # Pascals
+
     def add_callback(self, pgn, func):
         # Register callbacks for specific PGNs
         self._callbacks[pgn] = func
@@ -73,6 +76,11 @@ class MockNMEA2000:
             # --- Simulate Depth Data (PGN 128267) ---
             self.depth = 10.0 + 2.0 * math.sin(current_time / 7) # Oscillate depth
             self.depth = max(0.5, self.depth) # Ensure depth is positive
+
+            # --- Simulate Pressure Data (PGN 130314) ---
+            self.pressure_pa = 101325.0 + 150 * math.sin(current_time / 60) # Slow oscillation for pressure
+            if random.random() < 0.02: # Add some noise
+                self.pressure_pa += random.uniform(-25, 25)
 
             # --- Simulate GPS Position Data (PGN 129025) ---
             # Simulate slow movement (e.g., 5 m/s or ~10 knots)
