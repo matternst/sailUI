@@ -38,6 +38,7 @@ Bash:
 python main_app.py
 
 
+
 - - - - - - - - - - - - - - - - - - - - - - - 
 
 SSH ONTO RASBERRY PI 

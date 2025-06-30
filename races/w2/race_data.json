@@ -1,0 +1,12 @@
+{
+  "name": "W2",
+  "start_finish_line": {
+    "start": { "lat": 34.0520, "lon": -118.2440 },
+    "end": { "lat": 34.0524, "lon": -118.2435 }
+  },
+  "buoys": [
+    { "name": "Mark A", "lat": 34.0510, "lon": -118.2480, "rounding_direction": "Port"  },
+    { "name": "Mark B", "lat": 34.0490, "lon": -118.2410, "rounding_direction": "Starboard"  },
+    { "name": "Mark C", "lat": 34.0510, "lon": -118.2480, "rounding_direction": "Port"  }
+  ]
+}

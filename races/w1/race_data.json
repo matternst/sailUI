@@ -1,0 +1,12 @@
+{
+  "name": "W1",
+  "start_finish_line": {
+    "start": { "lat": 34.0520, "lon": -118.2440 },
+    "end": { "lat": 34.0524, "lon": -118.2435 }
+  },
+  "buoys": [
+    { "name": "Windward Mark", "lat": 34.0550, "lon": -118.2450, "rounding_direction": "Port" },
+    { "name": "Leeward Gate", "lat": 34.0500, "lon": -118.2420, "rounding_direction": "Starboard" },
+    { "name": "Finish Line", "lat": 34.0522, "lon": -118.2437, "rounding_direction": "Port" }
+  ]
+}
