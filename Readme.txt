@@ -482,6 +482,71 @@ if __name__ == "__main__":
     exit_code = main_app.run()
     main_app.cleanup()
     sys.exit(exit_code)
+
+
+
+
+    The Fix: Install the Pillow Library
+Make sure your virtual environment is still active. You should see (venv) at the start of your command prompt. If not, run source venv/bin/activate again.
+
+Install the Pillow library with this command:
+
+Bash:
+pip install Pillow
+
+
+
+
+
+
+The Fix: Install the waveshare_epd Library
+Let's ensure the library is installed directly into your project's virtual environment.
+
+Activate the virtual environment (if it's not already active):
+
+Bash:
+source venv/bin/activate
+
+Install the library directly from the e-Paper directory:
+
+Bash:
+pip install ../e-Paper/RaspberryPi_JetsonNano/python
+
+This command tells pip to install the library from the specified directory, ensuring it's placed within your active virtual environment.
+
+Verify the installation:
+
+Bash:
+pip list | grep waveshare
+
+
+
+The Fix: Install gpiozero
+Make sure your virtual environment is still active.
+
+Install the gpiozero library using pip:
+
+Bash:
+pip install gpiozero
+
+Once the installation is complete, run your application one last time:
+
+
+
+The Fix: Install the RPi.GPIO Library
+We will install RPi.GPIO, which is the most common library for this purpose. This will provide gpiozero with the stable driver it needs to communicate with the hardware correctly.
+
+Make sure your virtual environment is still active ((venv) should be at the start of your prompt).
+
+Install the RPi.GPIO library using pip:
+
+Bash:
+pip install RPi.GPIO
+
+
+
+
+
 5. Run the Application
 Now you are ready to run your updated SailUI application.
 
@@ -490,6 +555,5 @@ Make sure you are in the sailui directory and have your virtual environment acti
 Run the main application:
 
 Bash
-
 python main_app.py
 Your dashboard_ui should appear on your primary monitor, and the sail_ui should now be displayed on your new e-ink monitor, updating every 5 seconds.
