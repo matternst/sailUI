@@ -1,10 +1,12 @@
+# nmea_reader.py
 import sys
 import math
 import time
 import struct
 from PySide6.QtCore import QThread, Signal, Slot
+from log_manager import LogManager
 
-IS_RASPBERRY_PI = False 
+IS_RASPBERRY_PI = False
 if IS_RASPBERRY_PI:
     import can
 else:
@@ -58,21 +60,25 @@ class NMEA2000Reader(QThread):
     pressure_data_received = Signal(float)
     trip_data_received = Signal(float, float)
 
-    def __init__(self, parent=None):
+    def __init__(self, log_manager, parent=None):
         super().__init__(parent)
         self._running = True
         self.last_gps_pos = None
         self.last_gps_time = None
         self.total_distance_m = 0.0
         self.start_time = time.time()
-        
+        self.log_manager = log_manager
+        self.current_wind_speed = 0
+        self.current_wind_direction = "N/A"
+        self.current_boat_speed = 0
+
         if IS_RASPBERRY_PI:
             self.n2k_parser = NMEA2000Parser()
             self.bus = None
             self.notifier = None
         else:
             self.mock_n2k = MockNMEA2000()
-        
+
         self.setup_callbacks()
 
     def setup_callbacks(self):
@@ -88,19 +94,23 @@ class NMEA2000Reader(QThread):
             for pgn, func in callbacks.items(): self.mock_n2k.add_callback(pgn, func)
 
     def run(self):
+        self.log_manager.start_new_trip()
         try:
             if IS_RASPBERRY_PI:
                 self.bus = can.interface.Bus(channel='can0', bustype='socketcan')
                 self.notifier = can.Notifier(self.bus, [self.n2k_parser.handle_message])
             else:
                 self.mock_n2k.start()
-            while self._running: self.msleep(1000)
+            while self._running:
+                self.log_manager.update_trip_data(self.total_distance_m, self.current_wind_speed, self.current_wind_direction, self.current_boat_speed)
+                self.msleep(1000)
         finally:
+            self.log_manager.end_current_trip()
             if IS_RASPBERRY_PI:
                 if self.notifier: self.notifier.stop()
                 if self.bus: self.bus.shutdown()
             else:
-                self.mock_n2k.stop()
+                if hasattr(self, 'mock_n2k'): self.mock_n2k.stop()
             print("NMEA2000 thread stopped.")
 
     def stop(self):
@@ -109,6 +119,11 @@ class NMEA2000Reader(QThread):
 
     @Slot(int, dict)
     def _on_wind_data(self, pgn, data):
+        self.current_wind_speed = data['WindSpeed']
+        angle_deg = math.degrees(data['WindAngle'])
+        dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+        idx = round(angle_deg / 45) % 8
+        self.current_wind_direction = dirs[idx]
         self.wind_data_received.emit(data['WindSpeed'], data['WindAngle'], data['Reference'])
 
     @Slot(int, dict)
@@ -130,11 +145,12 @@ class NMEA2000Reader(QThread):
             time_diff_s = current_time - self.last_gps_time
             if time_diff_s > 0.5:
                 speed_mps = distance_m / time_diff_s
-                self.speed_data_received.emit(speed_mps * 1.94384)
+                self.current_boat_speed = speed_mps * 1.94384
+                self.speed_data_received.emit(self.current_boat_speed)
                 self.total_distance_m += distance_m
                 bearing_deg = calculate_bearing(self.last_gps_pos[0], self.last_gps_pos[1], current_pos_rad[0], current_pos_rad[1])
                 self.heading_data_received.emit(bearing_deg)
-        
+
         elapsed_time_s = current_time - self.start_time
         self.trip_data_received.emit(self.total_distance_m, elapsed_time_s)
         self.position_data_received.emit(lat_rad, lon_rad)

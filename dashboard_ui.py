@@ -3,11 +3,13 @@ import os
 import math
 import time
 from collections import deque
+from datetime import datetime
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QTabWidget, QLabel,
                                QCheckBox, QPushButton, QGridLayout, QHBoxLayout, QListWidget,
-                               QListWidgetItem)
-from PySide6.QtCore import Qt, Signal, Slot, QTimer, QSize, QPointF
+                               QListWidgetItem, QTableWidget, QTableWidgetItem, QHeaderView, QInputDialog, QMessageBox)
+from PySide6.QtCore import Qt, Signal, Slot, QTimer, QSize, QPointF, QUrl
 from PySide6.QtGui import QKeyEvent, QPainter, QColor, QPolygonF, QBrush, QPen
+from PySide6.QtMultimedia import QSoundEffect
 
 # --- (Helper functions and widgets remain the same) ---
 def haversine_distance(lat1_rad, lon1_rad, lat2_rad, lon2_rad):
@@ -56,7 +58,7 @@ class TrendDataWidget(QWidget):
         self.title_label=QLabel(title); self.title_label.setStyleSheet("font-family:Oxanium;font-weight:bold;font-size:18px;color:#888;")
         value_layout=QHBoxLayout(); value_layout.setSpacing(15)
         self.value_label=QLabel("N/A"); self.value_label.setStyleSheet("font-family:Oxanium;font-weight:bold;font-size:64px;color:white;")
-        self.trend_label=QLabel(""); self.trend_label.setStyleSheet("font-family:Oxanium;font-weight:bold;font-size:21px;color:#888;")
+        self.trend_label=QLabel(""); self.trend_label.setStyleSheet("font-family:Oxanium;font-weight:bold;font-size:25px;color:#888; padding-bottom: 10px;")
         value_layout.addWidget(self.value_label); value_layout.addWidget(self.trend_label, alignment=Qt.AlignBottom); value_layout.addStretch()
         self.unit_label=QLabel(unit); self.unit_label.setStyleSheet("font-family:Oxanium;font-size:18px;color:#888;")
         main_layout.addWidget(self.title_label); main_layout.addLayout(value_layout); main_layout.addWidget(self.unit_label)
@@ -71,6 +73,11 @@ class DashboardUI(QWidget):
     test_banner_requested = Signal() # Add this new signal
     show_test_banner_requested = Signal()
     hide_test_banner_requested = Signal()
+    delete_trip_requested = Signal(str)
+    set_people_requested = Signal(str, int)
+    trip_type_changed = Signal(str)
+    trip_course_changed = Signal(str)
+    anchor_drift_alarm = Signal(bool)
 
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() == Qt.Key.Key_B and not event.isAutoRepeat():
@@ -93,38 +100,282 @@ class DashboardUI(QWidget):
         self.wind_history=deque(maxlen=300); self.pressure_history=deque(maxlen=300)
         self.anchor_pos_rad=None; self.current_pos_rad=None; layout=QVBoxLayout(self)
         self.tabs=QTabWidget(); self.tabs.setTabPosition(QTabWidget.South)
-        self.tabs.setStyleSheet("QTabBar::tab{background:#282828;color:white;padding:15px;font-size:20px;border-top:2px solid #282828;}QTabBar::tab:selected{background:#3c3c3c;border-top:2px solid #007acc;}")
-        self.dashboard_tab=QWidget(); self.settings_tab=QWidget()
-        self.tabs.addTab(self.dashboard_tab,"Dashboard"); self.tabs.addTab(self.settings_tab,"Settings")
-        layout.addWidget(self.tabs); self._setup_dashboard_grid(); self._setup_settings_panel()
+        self.tabs.setStyleSheet("""
+            QTabBar::tab {
+                background: #282828;
+                color: white;
+                padding: 15px;
+                font-family: Oxanium;
+                font-size: 18px;
+                font-weight: bold;
+                margin-right: 4px;
+            }
+            QTabBar::tab:first {
+                border-top-left-radius: 6px;
+                border-bottom-left-radius: 6px;
+            }
+            QTabBar::tab:last {
+                border-top-right-radius: 6px;
+                border-bottom-right-radius: 6px;
+                margin-right: 0px;
+            }
+            QTabBar::tab:selected {
+                background: #8AE2F8;
+                color: black;
+                border-top: none;
+            }
+        """)
+
+        self.dashboard_tab=QWidget(); self.log_tab = QWidget(); self.settings_tab=QWidget()
+        self.tabs.addTab(self.dashboard_tab,"Dashboard"); self.tabs.addTab(self.log_tab, "Ships log") ;self.tabs.addTab(self.settings_tab,"Settings")
+        layout.addWidget(self.tabs); self._setup_dashboard_grid(); self._setup_log_panel(); self._setup_settings_panel()
         self.trend_timer=QTimer(self); self.trend_timer.timeout.connect(self.update_trends); self.trend_timer.start(5000)
 
+        self.alarm_sound = QSoundEffect()
+        script_dir = os.path.dirname(__file__)
+        sound_file_path = os.path.join(script_dir, "beep.wav") # Using .wav is more reliable
+        self.alarm_sound.setSource(QUrl.fromLocalFile(sound_file_path))
+        self.alarm_sound.setLoopCount(-2)
+
+
     def _setup_dashboard_grid(self):
-        grid_layout=QGridLayout(self.dashboard_tab); grid_layout.setContentsMargins(60,50,60,50); grid_layout.setVerticalSpacing(50); grid_layout.setHorizontalSpacing(80)
-        self.depth_widget=DataWidget("DEPTH","feet"); self.trip_dist_widget=DataWidget("TRIP DISTANCE","miles"); self.trip_time_widget=DataWidget("TRIP TIME","")
-        grid_layout.addWidget(self.depth_widget,0,0,alignment=Qt.AlignTop); grid_layout.addWidget(self.trip_dist_widget,1,0,alignment=Qt.AlignTop); grid_layout.addWidget(self.trip_time_widget,2,0,alignment=Qt.AlignTop)
-        self.wind_dir_widget=DirectionalDataWidget("WIND DIR.",""); self.heading_widget=DirectionalDataWidget("HEADING","°")
-        self.wind_speed_widget=TrendDataWidget("AP. WIND SPEED","knots"); self.pressure_widget=TrendDataWidget("PRESSURE","Pascal")
-        grid_layout.addWidget(self.wind_dir_widget,0,1,alignment=Qt.AlignTop); grid_layout.addWidget(self.wind_speed_widget,1,1,alignment=Qt.AlignTop); grid_layout.addWidget(self.pressure_widget,2,1,alignment=Qt.AlignTop)
-        self.position_widget=DataWidget("POSITION","",value_size=30); self.drag_widget=DataWidget("DRAG / DRIFT","ft")
-        drag_layout=QHBoxLayout(); self.anchor_button=QPushButton("⚓"); self.anchor_button.setCheckable(True); self.anchor_button.setFixedSize(80,80)
-        self.anchor_button.setStyleSheet("QPushButton{font-size:40px;border-radius:40px;background-color:#444;}QPushButton:checked{background-color:#007acc;}")
-        drag_layout.addWidget(self.drag_widget); drag_layout.addWidget(self.anchor_button); drag_container=QWidget(); drag_container.setLayout(drag_layout)
-        grid_layout.addWidget(self.heading_widget,0,2,alignment=Qt.AlignTop); grid_layout.addWidget(self.position_widget,1,2,alignment=Qt.AlignTop); grid_layout.addWidget(drag_container,2,2,alignment=Qt.AlignTop)
+        dashboard_layout = QVBoxLayout(self.dashboard_tab)
+        dashboard_layout.setContentsMargins(0, 0, 0, 0)
+        dashboard_layout.setSpacing(0)
+
+        self.drift_alarm_banner = QWidget(self.dashboard_tab)
+        banner_layout = QHBoxLayout(self.drift_alarm_banner)
+        banner_label = QLabel("ANCHOR DRIFTING!")
+        banner_label.setStyleSheet("font-size: 24px; font-weight: bold; color: black;")
+        dismiss_button = QPushButton("Dismiss")
+        dismiss_button.setStyleSheet("""
+            QPushButton {
+                font-family: Oxanium;
+                font-size: 18px;
+                font-weight: bold;
+                color: black;
+                background-color: #F28B82;
+                border: 1px solid black;
+                padding: 10px 20px;
+                border-radius: 8px;
+            }
+            QPushButton:hover {
+                background-color: #3c3c3c;
+                color: white;
+            }
+        """)
+        banner_layout.addWidget(banner_label, alignment=Qt.AlignLeft)
+        banner_layout.addWidget(dismiss_button, alignment=Qt.AlignRight)
+        self.drift_alarm_banner.setStyleSheet("background-color: #F28B82; padding: 10px; border-radius: 8px;")
+        self.drift_alarm_banner.hide()
+        dismiss_button.clicked.connect(self.on_dismiss_alarm)
+
+        grid_widget = QWidget()
+        grid_layout = QGridLayout(grid_widget)
+        grid_layout.setContentsMargins(60, 50, 60, 50)
+        grid_layout.setVerticalSpacing(50)
+        grid_layout.setHorizontalSpacing(80)
+
+        self.depth_widget = DataWidget("DEPTH", "feet")
+        self.depth_widget.layout().setContentsMargins(0, 20, 0, 0)
+        self.trip_dist_widget = DataWidget("TRIP DISTANCE", "miles")
+        self.trip_time_widget = DataWidget("TRIP TIME", "")
+        grid_layout.addWidget(self.depth_widget, 0, 0, alignment=Qt.AlignTop)
+        grid_layout.addWidget(self.trip_dist_widget, 1, 0, alignment=Qt.AlignTop)
+        grid_layout.addWidget(self.trip_time_widget, 2, 0, alignment=Qt.AlignTop)
+        self.wind_dir_widget = DirectionalDataWidget("WIND DIR.", "")
+        self.heading_widget = DirectionalDataWidget("HEADING", "°")
+        self.wind_speed_widget = TrendDataWidget("AP. WIND SPEED", "knots")
+        self.pressure_widget = TrendDataWidget("PRESSURE", "Pascal")
+        grid_layout.addWidget(self.wind_dir_widget, 0, 1, alignment=Qt.AlignTop)
+        grid_layout.addWidget(self.wind_speed_widget, 1, 1, alignment=Qt.AlignTop)
+        grid_layout.addWidget(self.pressure_widget, 2, 1, alignment=Qt.AlignTop)
+        self.position_widget = DataWidget("POSITION", "", value_size=30)
+        self.drag_widget = DataWidget("DRAG / DRIFT", "ft")
+        drag_layout = QHBoxLayout()
+        self.anchor_button = QPushButton("Set")
+        self.anchor_button.setCheckable(True)
+        self.anchor_button.setStyleSheet("""
+            QPushButton {
+                font-family: Oxanium;
+                font-size: 18px;
+                font-weight: bold;
+                color: white;
+                background-color: #282828;
+                border: none;
+                padding: 15px;
+                margin-bottom: 5px;
+                border-radius: 8px;
+            }
+            QPushButton:hover {
+                background-color: #3c3c3c;
+            }
+        """)
+        drag_layout.addWidget(self.drag_widget, alignment=Qt.AlignTop)
+        drag_layout.addWidget(self.anchor_button, alignment=Qt.AlignTop)
+        drag_container = QWidget()
+        drag_container.setLayout(drag_layout)
+        grid_layout.addWidget(self.heading_widget, 0, 2, alignment=Qt.AlignTop)
+        grid_layout.addWidget(self.position_widget, 1, 2, alignment=Qt.AlignTop)
+        grid_layout.addWidget(drag_container, 2, 2, alignment=Qt.AlignTop)
         self.anchor_button.toggled.connect(self.on_anchor_toggled)
+        
+        dashboard_layout.addWidget(self.drift_alarm_banner)
+        dashboard_layout.addWidget(grid_widget)
+
+
+    def _setup_log_panel(self):
+        log_layout = QVBoxLayout(self.log_tab)
+        log_layout.setContentsMargins(20, 20, 20, 20)
+        log_header = QLabel("Ships Log")
+        log_header.setStyleSheet("font-family: Oxanium; font-size: 24px; font-weight: bold; padding-bottom: 10px; color: #BDC1C6;")
+        self.log_table = QTableWidget()
+        self.log_table.setColumnCount(10)
+        self.log_table.setHorizontalHeaderLabels(["Trip ID", "Date", "Duration", "Type", "Course", "Distance\n(mi)", "Wind Dir.", "Wind\n(Min/Max) kts", "Boat\n(Min/Max) kts", "People"])
+        self.log_table.setColumnHidden(0, True) # Hide the Trip ID column
+        header = self.log_table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Stretch)
+        header.setDefaultAlignment(Qt.AlignLeft)
+        for i in range(self.log_table.columnCount()):
+            self.log_table.setColumnWidth(i, 150) # Adjust as needed
+        self.log_table.setColumnWidth(1, 200) # Date column
+        self.log_table.verticalHeader().setVisible(False)
+        self.log_table.verticalHeader().setDefaultSectionSize(40) # Increased row height
+        self.log_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.log_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.log_table.setShowGrid(False)
+        self.log_table.setStyleSheet("""
+            QTableWidget {
+                font-size: 16px;
+                border: none;
+            }
+            QTableWidget::item {
+                border-top: 1px solid #80868B;
+                padding: 5px;
+            }
+            QTableWidget::item:selected {
+                background-color: #8AE2F8;
+                color: black;
+            }
+            QHeaderView::section {
+                background-color: #1e1e1e;
+                border: none;
+                font-size: 14px;
+                font-weight: bold;
+                padding: 5px;
+            }
+        """)
+
+        button_layout = QHBoxLayout()
+        button_style = """
+            QPushButton {
+                font-family: Oxanium;
+                font-size: 18px;
+                font-weight: bold;
+                color: white;
+                background-color: #282828;
+                border: none;
+                padding: 15px;
+                margin-bottom: 5px;
+                border-radius: 8px;
+            }
+            QPushButton:hover {
+                background-color: #3c3c3c;
+            }
+        """
+        add_people_button = QPushButton("Set People")
+        add_people_button.setStyleSheet(button_style)
+        add_people_button.clicked.connect(self.on_set_people)
+        delete_button = QPushButton("Delete Trip")
+        delete_button.setStyleSheet(button_style)
+        delete_button.clicked.connect(self.on_delete_trip)
+        button_layout.addWidget(add_people_button)
+        button_layout.addWidget(delete_button)
+        button_layout.addStretch()
+
+        log_layout.addWidget(log_header)
+        log_layout.addWidget(self.log_table)
+        log_layout.addLayout(button_layout)
+
 
     def _setup_settings_panel(self):
-        main_settings_layout=QGridLayout(self.settings_tab); main_settings_layout.setContentsMargins(30,30,30,30); main_settings_layout.setHorizontalSpacing(40)
-        ui_config_layout=QVBoxLayout(); ui_config_label=QLabel("Sail UI Dashboard"); self.ui_config_list=QListWidget()
+        main_settings_layout=QGridLayout(self.settings_tab)
+        main_settings_layout.setContentsMargins(20, 20, 20, 20)
+
+        header_style = "font-size:24px;font-family:Oxanium;font-weight:bold;padding-bottom:10px;color:#BDC1C6;"
+        sub_header_style = "font-size:24px;font-family:Oxanium;font-weight:bold;padding-bottom:10px;color:#BDC1C6; margin-top: 24px;"
+        label_style = "font-size:18px;font-family:Oxanium;color:#BDC1C6;"
+
+        ui_config_layout=QVBoxLayout();
+        ui_config_label=QLabel("Sail UI Dashboard")
+        ui_config_label.setStyleSheet(header_style)
+        self.ui_config_list=QListWidget()
         QListWidgetItem("Standard View",self.ui_config_list); QListWidgetItem("Standard (No Wind Arrow)", self.ui_config_list); QListWidgetItem("Race Mode", self.ui_config_list)
-        self.ui_config_list.setCurrentRow(0); race_courses_layout=QVBoxLayout(); self.race_courses_label=QLabel("Race Courses"); self.race_courses_list=QListWidget()
+        self.ui_config_list.setCurrentRow(0)
+
+        race_courses_layout=QVBoxLayout()
+        self.race_courses_label=QLabel("Race Courses")
+        self.race_courses_label.setStyleSheet(header_style)
+        self.race_courses_list=QListWidget()
         self.populate_race_courses()
+
         list_stylesheet="QListWidget{font-size:18px;font-family:Oxanium;border:none;}QListWidget::item{padding:15px;margin-bottom:5px;}QListWidget::item:selected{background-color:#ffffff;color:#252525;border-radius:8px;}"
         self.ui_config_list.setStyleSheet(list_stylesheet); self.race_courses_list.setStyleSheet(list_stylesheet)
         ui_config_layout.addWidget(ui_config_label); ui_config_layout.addWidget(self.ui_config_list); race_courses_layout.addWidget(self.race_courses_label); race_courses_layout.addWidget(self.race_courses_list)
-        general_settings_layout=QVBoxLayout(); general_settings_label=QLabel("Settings"); light_dark_label=QLabel("Light/Dark Mode"); self.theme_checkbox=QCheckBox("Enable Light Mode")
-        bt_connection_label=QLabel("Bluetooth Connection"); self.bt_status_label=QLabel("Status: Checking..."); self.bt_status_label.setFixedWidth(250); self.bt_status_label.setWordWrap(True)
-        discoverable_button=QPushButton("Make Discoverable"); exit_button=QPushButton("Exit Sailing App")
+
+        general_settings_layout=QVBoxLayout()
+        general_settings_label=QLabel("Settings")
+        general_settings_label.setStyleSheet(header_style)
+        light_dark_label=QLabel("Light/Dark Mode")
+        light_dark_label.setStyleSheet(sub_header_style)
+        self.theme_checkbox=QCheckBox("Enable Light Mode")
+        self.theme_checkbox.setStyleSheet(label_style)
+
+        bt_connection_label=QLabel("Bluetooth Connection")
+        bt_connection_label.setStyleSheet(sub_header_style)
+        self.bt_status_label=QLabel("Status: Checking...")
+        self.bt_status_label.setStyleSheet(label_style)
+        self.bt_status_label.setFixedWidth(250); self.bt_status_label.setWordWrap(True)
+
+        button_style = """
+            QPushButton {
+                font-family: Oxanium;
+                font-size: 18px;
+                font-weight: bold;
+                color: white;
+                background-color: #282828;
+                border: none;
+                padding: 15px;
+                margin-bottom: 5px;
+                border-radius: 8px;
+            }
+            QPushButton:hover {
+                background-color: #3c3c3c;
+            }
+        """
+        exit_button_style = """
+            QPushButton {
+                font-family: Oxanium;
+                font-size: 18px;
+                font-weight: bold;
+                color: black;
+                background-color: #F28B82;
+                border: none;
+                padding: 15px;
+                margin-bottom: 5px;
+                border-radius: 8px;
+            }
+            QPushButton:hover {
+                background-color: #3c3c3c;
+                color: white;
+            }
+        """
+
+        discoverable_button=QPushButton("Make Discoverable")
+        discoverable_button.setStyleSheet(button_style)
+        exit_button=QPushButton("Exit Sailing App")
+        exit_button.setStyleSheet(exit_button_style)
+
         general_settings_layout.addWidget(general_settings_label); general_settings_layout.addWidget(light_dark_label); general_settings_layout.addWidget(self.theme_checkbox)
         general_settings_layout.addWidget(bt_connection_label); general_settings_layout.addWidget(self.bt_status_label); general_settings_layout.addWidget(discoverable_button)
         general_settings_layout.addStretch(); general_settings_layout.addWidget(exit_button)
@@ -147,14 +398,30 @@ class DashboardUI(QWidget):
             race_dir_name = item.data(Qt.UserRole)
             print(f"DEBUG (dashboard_ui): Race selected: '{race_dir_name}'. Emitting signal.")
             self.race_selected.emit(race_dir_name)
+            self.trip_course_changed.emit(race_dir_name)
+
 
     @Slot(QListWidgetItem)
     def on_ui_config_changed(self,current_item):
-        is_race_mode=current_item.text()=="Race Mode"; self.race_courses_label.setEnabled(is_race_mode); self.race_courses_list.setEnabled(is_race_mode)
+        is_race_mode=current_item.text()=="Race Mode"
+        self.race_courses_label.setEnabled(is_race_mode)
+        self.race_courses_list.setEnabled(is_race_mode)
         enabled_stylesheet="QListWidget{font-size:18px;font-family:Oxanium;border:none;}QListWidget::item{padding:15px;margin-bottom:5px;}QListWidget::item:selected{border-radius:8px;background-color:#ffffff;color:#252525;}"
         disabled_stylesheet="QListWidget{font-size:18px;font-family:Oxanium;border:none;}QListWidget::item{padding:15px;margin-bottom:5px;color:#888;}QListWidget::item:selected{border-radius:8px;background-color:none;color:#888;}"
-        if is_race_mode: self.race_courses_list.setStyleSheet(enabled_stylesheet); self.race_courses_label.setStyleSheet("font-size:24px;font-family:Oxanium;font-weight:bold;padding-bottom:10px;color:white;")
-        else: self.race_courses_list.setStyleSheet(disabled_stylesheet); self.race_courses_label.setStyleSheet("font-size:24px;font-family:Oxanium;font-weight:bold;padding-bottom:10px;color:#888;")
+
+        if is_race_mode:
+            self.trip_type_changed.emit("Race")
+            selected_course_item = self.race_courses_list.currentItem()
+            if selected_course_item:
+                self.trip_course_changed.emit(selected_course_item.data(Qt.UserRole))
+            self.race_courses_list.setStyleSheet(enabled_stylesheet)
+            self.race_courses_label.setStyleSheet("font-size:24px;font-family:Oxanium;font-weight:bold;padding-bottom:10px;color:#BDC1C6;")
+        else:
+            self.trip_type_changed.emit("Cruise")
+            self.trip_course_changed.emit(None)
+            self.race_courses_list.setStyleSheet(disabled_stylesheet)
+            self.race_courses_label.setStyleSheet("font-size:24px;font-family:Oxanium;font-weight:bold;padding-bottom:10px;color:#BDC1C6;")
+
 
     def keyPressEvent(self,event:QKeyEvent):
         if event.key()==Qt.Key.Key_Escape: self.escape_pressed.emit()
@@ -188,10 +455,21 @@ class DashboardUI(QWidget):
         if self.anchor_pos_rad:
             dist_m=haversine_distance(self.anchor_pos_rad[0],self.anchor_pos_rad[1],lat_rad,lon_rad)
             self.drag_widget.value_label.setText(f"{dist_m*3.28084:.1f}")
+            if dist_m > 22.86: # 75 feet in meters
+                self.anchor_drift_alarm.emit(True)
+            else:
+                self.anchor_drift_alarm.emit(False)
+
     @Slot(bool)
     def on_anchor_toggled(self,checked):
         self.anchor_pos_rad=self.current_pos_rad if checked else None
-        if not checked: self.drag_widget.value_label.setText("N/A")
+        if not checked:
+            self.drag_widget.value_label.setText("N/A")
+            self.anchor_button.setText("Set")
+            self.anchor_drift_alarm.emit(False)
+        else:
+            self.anchor_button.setText("Unset")
+
     def update_trends(self):
         if len(self.wind_history)>1:
             diff=self.wind_history[-1][1]-self.wind_history[0][1]
@@ -199,3 +477,91 @@ class DashboardUI(QWidget):
         if len(self.pressure_history)>1:
             diff=self.pressure_history[-1][1]-self.pressure_history[0][1]
             self.pressure_widget.trend_label.setText(f"{'▲' if diff > 0 else '▼'} {abs(diff):.0f}*")
+
+    def populate_log_table(self, trips):
+        self.log_table.setRowCount(0) # Clear the table first
+        sorted_trips = sorted(trips, key=lambda x: x['start_time'], reverse=True)
+        self.log_table.setRowCount(len(sorted_trips))
+        for row, trip in enumerate(sorted_trips):
+            start_time_str = datetime.fromtimestamp(trip['start_time']).strftime('%b %d, %Y')
+            duration_h = 0
+            if trip['end_time']:
+                duration_s = trip['end_time'] - trip['start_time']
+                duration_h, rem = divmod(duration_s, 3600)
+                duration_m, _ = divmod(rem, 60)
+            else:
+                duration_m = 0
+
+            self.log_table.setItem(row, 0, QTableWidgetItem(trip['id']))
+            self.log_table.setItem(row, 1, QTableWidgetItem(start_time_str))
+            self.log_table.setItem(row, 2, QTableWidgetItem(f"{int(duration_h)}hr {int(duration_m):02}mins"))
+            self.log_table.setItem(row, 3, QTableWidgetItem(trip.get('type', 'Cruise')))
+            self.log_table.setItem(row, 4, QTableWidgetItem(trip.get('course', 'N/A') or 'N/A'))
+            self.log_table.setItem(row, 5, QTableWidgetItem(f"{trip['distance'] / 1609.34:.1f}"))
+            self.log_table.setItem(row, 6, QTableWidgetItem(trip.get('wind_direction', 'N/A')))
+            self.log_table.setItem(row, 7, QTableWidgetItem(f"{trip['max_wind_speed']:.1f} / {trip['min_wind_speed']:.1f}"))
+            self.log_table.setItem(row, 8, QTableWidgetItem(f"{trip['max_boat_speed']:.1f} / {trip['min_boat_speed']:.1f}"))
+            self.log_table.setItem(row, 9, QTableWidgetItem(str(trip['people']) if trip['people'] is not None else "N/A"))
+
+
+    def on_delete_trip(self):
+        selected_items = self.log_table.selectedItems()
+        if selected_items:
+            msg_box = QMessageBox()
+            msg_box.setWindowTitle("Confirm Deletion")
+            msg_box.setText("Are you sure you want to delete this trip log?")
+            msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+            msg_box.setDefaultButton(QMessageBox.No)
+            msg_box.setStyleSheet("""
+                QMessageBox {
+                    background-color: #1e1e1e;
+                    font-family: Oxanium;
+                }
+                QMessageBox QLabel {
+                    color: white;
+                    font-size: 18px;
+                }
+                QMessageBox QPushButton {
+                    font-family: Oxanium;
+                    font-size: 16px;
+                    font-weight: bold;
+                    color: white;
+                    background-color: #282828;
+                    border: none;
+                    padding: 10px;
+                    min-width: 80px;
+                    border-radius: 8px;
+                }
+                QMessageBox QPushButton:hover {
+                    background-color: #3c3c3c;
+                }
+            """)
+
+            if msg_box.exec() == QMessageBox.Yes:
+                trip_id = self.log_table.item(selected_items[0].row(), 0).text()
+                self.delete_trip_requested.emit(trip_id)
+
+    def on_set_people(self):
+        selected_items = self.log_table.selectedItems()
+        if selected_items:
+            trip_id = self.log_table.item(selected_items[0].row(), 0).text()
+            num_people, ok = QInputDialog.getInt(self, "Set People", "Enter number of people:")
+            if ok:
+                self.set_people_requested.emit(trip_id, num_people)
+
+    @Slot(bool)
+    def on_anchor_drift_alarm(self, is_drifting):
+        if is_drifting:
+            self.drift_alarm_banner.show()
+            self.drift_alarm_banner.raise_()
+            if self.alarm_sound.source().isEmpty() or not os.path.exists(self.alarm_sound.source().toLocalFile()):
+                print("Alarm sound file not found.")
+                return
+            if not self.alarm_sound.isPlaying():
+                self.alarm_sound.play()
+        else:
+            self.drift_alarm_banner.hide()
+            self.alarm_sound.stop()
+            
+    def on_dismiss_alarm(self):
+        self.anchor_button.setChecked(False)

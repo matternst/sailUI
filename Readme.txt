@@ -41,6 +41,21 @@ python main_app.py
 
 - - - - - - - - - - - - - - - - - - - - - - - 
 
+COMMITING TO GITHUB
+
+- - - - - - - - - - - - - - - - - - - - - - - 
+
+Bash:
+git add .
+
+Bash:
+git commit -m ""
+
+Bash:
+git push origin main
+
+- - - - - - - - - - - - - - - - - - - - - - - 
+
 SSH ONTO RASBERRY PI 
 
 - - - - - - - - - - - - - - - - - - - - - - - 

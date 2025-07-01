@@ -3,7 +3,9 @@ import sys
 import platform
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QPixmap
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, Slot
+from log_manager import LogManager
+
 IS_RASPBERRY_PI=platform.system()=="Linux"
 if IS_RASPBERRY_PI: from epaper_display import EpaperDisplay
 else: from mock_epaper_display import MockEpaperDisplay as EpaperDisplay
@@ -16,7 +18,8 @@ class MainApplication:
     def __init__(self):
         self.app=QApplication(sys.argv)
         primary_screen=self.app.primaryScreen()
-        self.nmea_thread=NMEA2000Reader(); self.bt_manager=BluetoothManager()
+        self.log_manager = LogManager()
+        self.nmea_thread=NMEA2000Reader(self.log_manager); self.bt_manager=BluetoothManager()
         self.sail_ui=SailUI(); self.dashboard_ui=DashboardUI(); self.epaper=EpaperDisplay()
         self.connect_signals()
         self.dashboard_ui.show()
@@ -26,6 +29,7 @@ class MainApplication:
             self.update_timer=QTimer(); self.update_timer.timeout.connect(self.update_epaper_display)
             self.update_timer.start(5000)
         self.nmea_thread.start()
+        self.dashboard_ui.populate_log_table(self.log_manager.get_all_trips())
 
     def connect_signals(self):
         map_widget = self.sail_ui.race_view.map_widget
@@ -52,6 +56,11 @@ class MainApplication:
         self.dashboard_ui.exit_app_clicked.connect(self.app.quit)
         self.sail_ui.escape_pressed.connect(self.app.quit)
         self.dashboard_ui.escape_pressed.connect(self.app.quit)
+        self.dashboard_ui.delete_trip_requested.connect(self.delete_trip)
+        self.dashboard_ui.set_people_requested.connect(self.set_people)
+        self.dashboard_ui.trip_type_changed.connect(self.set_trip_type)
+        self.dashboard_ui.trip_course_changed.connect(self.set_trip_course)
+        self.dashboard_ui.anchor_drift_alarm.connect(self.dashboard_ui.on_anchor_drift_alarm)
 
     def update_epaper_display(self):
         pixmap=QPixmap(self.sail_ui.size()); self.sail_ui.render(pixmap)
@@ -62,6 +71,24 @@ class MainApplication:
     def cleanup(self):
         print("Cleaning up and stopping threads..."); self.nmea_thread.stop()
         if IS_RASPBERRY_PI: self.epaper.clear(); self.epaper.sleep()
+
+    @Slot(str)
+    def delete_trip(self, trip_id):
+        self.log_manager.delete_trip(trip_id)
+        self.dashboard_ui.populate_log_table(self.log_manager.get_all_trips())
+
+    @Slot(str, int)
+    def set_people(self, trip_id, num_people):
+        self.log_manager.set_people(trip_id, num_people)
+        self.dashboard_ui.populate_log_table(self.log_manager.get_all_trips())
+
+    @Slot(str)
+    def set_trip_type(self, trip_type):
+        self.log_manager.set_trip_type(trip_type)
+
+    @Slot(str)
+    def set_trip_course(self, course_name):
+        self.log_manager.set_trip_course(course_name)
 
 if __name__=="__main__":
     main_app=MainApplication(); exit_code=main_app.run(); main_app.cleanup(); sys.exit(exit_code)
