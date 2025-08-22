@@ -15,8 +15,8 @@ class SailUI(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Sail UI Display")
-        # --- THIS LINE HAS BEEN CHANGED ---
-        self.setGeometry(100, 100, 800, 480)
+        # --- THIS LINE HAS BEEN CHANGED to be more forceful ---
+        self.setFixedSize(800, 480)
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.standard_view = StandardSailView()
