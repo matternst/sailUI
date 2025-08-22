@@ -2,36 +2,56 @@
 import sys
 import platform
 from PySide6.QtWidgets import QApplication
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtCore import QTimer, Slot
-from log_manager import LogManager
+from PIL import Image
 
-IS_RASPBERRY_PI=platform.system()=="Linux"
-if IS_RASPBERRY_PI: from epaper_display import EpaperDisplay
-else: from mock_epaper_display import MockEpaperDisplay as EpaperDisplay
+from log_manager import LogManager
 from nmea_reader import NMEA2000Reader
 from sail_ui import SailUI
 from dashboard_ui import DashboardUI
 from bluetooth_manager import BluetoothManager
 
+# Import the new server and shared image components
+from shared_image import SharedImage
+from image_server import create_image_server, run_server
+
 class MainApplication:
     def __init__(self):
+        """Initializes the main application, UI windows, and connections."""
         self.app=QApplication(sys.argv)
         primary_screen=self.app.primaryScreen()
+        
         self.log_manager = LogManager()
-        self.nmea_thread=NMEA2000Reader(self.log_manager); self.bt_manager=BluetoothManager()
-        self.sail_ui=SailUI(); self.dashboard_ui=DashboardUI(); self.epaper=EpaperDisplay()
+        self.nmea_thread=NMEA2000Reader(self.log_manager)
+        self.bt_manager=BluetoothManager()
+        self.sail_ui=SailUI()
+        self.dashboard_ui=DashboardUI()
+
+        # --- New Server Setup ---
+        self.shared_image = SharedImage()
+        self.image_server_app = create_image_server(self.shared_image)
+        run_server(self.image_server_app) # Start the server in a background thread
+
         self.connect_signals()
         self.dashboard_ui.show()
-        if not IS_RASPBERRY_PI: self.sail_ui.show()
+        
+        # The sail_ui no longer needs to be shown on the Pi 4, but it's useful for debugging on a PC
+        if platform.system() != "Linux":
+            self.sail_ui.show()
+
         if primary_screen: self.dashboard_ui.move(primary_screen.geometry().topLeft())
-        if IS_RASPBERRY_PI:
-            self.update_timer=QTimer(); self.update_timer.timeout.connect(self.update_epaper_display)
-            self.update_timer.start(5000)
+        
+        # This timer now updates the shared image, not a physical display
+        self.update_timer=QTimer()
+        self.update_timer.timeout.connect(self.update_shared_image)
+        self.update_timer.start(5000) # Update image every 5 seconds
+
         self.nmea_thread.start()
         self.dashboard_ui.populate_log_table(self.log_manager.get_all_trips())
 
     def connect_signals(self):
+        """Connects all the signals and slots between components."""
         map_widget = self.sail_ui.race_view.map_widget
         self.dashboard_ui.show_test_banner_requested.connect(map_widget.show_test_banner)
         self.dashboard_ui.hide_test_banner_requested.connect(map_widget.hide_test_banner)
@@ -62,15 +82,32 @@ class MainApplication:
         self.dashboard_ui.trip_course_changed.connect(self.set_trip_course)
         self.dashboard_ui.anchor_drift_alarm.connect(self.dashboard_ui.on_anchor_drift_alarm)
 
-    def update_epaper_display(self):
-        pixmap=QPixmap(self.sail_ui.size()); self.sail_ui.render(pixmap)
-        from PIL import Image; qimage=pixmap.toImage(); buffer=qimage.bits().tobytes()
+    def update_shared_image(self):
+        """Renders the SailUI to an image and places it in the shared buffer."""
+        pixmap=QPixmap(self.sail_ui.size())
+        self.sail_ui.render(pixmap)
+        
+        qimage=pixmap.toImage()
+        # Ensure the format is RGBA for consistency
+        qimage = qimage.convertToFormat(QImage.Format_RGBA8888)
+
+        buffer=qimage.bits().tobytes()
         pil_image=Image.frombytes("RGBA",(qimage.width(),qimage.height()),buffer,'raw',"RGBA")
-        self.epaper.display_image(pil_image)
-    def run(self): return self.app.exec()
+        
+        # Convert to black and white for the e-ink display
+        bw_image = pil_image.convert("1")
+        
+        self.shared_image.update_image(bw_image)
+        print("Updated shared image buffer.") # Uncomment for debugging
+
+    def run(self):
+        """Executes the application's main loop."""
+        return self.app.exec()
+
     def cleanup(self):
-        print("Cleaning up and stopping threads..."); self.nmea_thread.stop()
-        if IS_RASPBERRY_PI: self.epaper.clear(); self.epaper.sleep()
+        """Stops background threads."""
+        print("Cleaning up and stopping threads...")
+        self.nmea_thread.stop()
 
     @Slot(str)
     def delete_trip(self, trip_id):
@@ -91,4 +128,8 @@ class MainApplication:
         self.log_manager.set_trip_course(course_name)
 
 if __name__=="__main__":
-    main_app=MainApplication(); exit_code=main_app.run(); main_app.cleanup(); sys.exit(exit_code)
+    main_app=MainApplication()
+    exit_code=main_app.run()
+    main_app.cleanup()
+    sys.exit(exit_code)
+

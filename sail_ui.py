@@ -33,10 +33,14 @@ class SailUI(QWidget):
     @Slot(int)
     def setView(self,index):
         if index<self.stacked_widget.count(): self.stacked_widget.setCurrentIndex(index)
+
     @Slot(bool)
     def setTheme(self,is_light_mode):
-        theme=LIGHT_THEME if is_light_mode else DARK_THEME; self.setStyleSheet(f"background-color: {theme['bg']};")
+        theme=LIGHT_THEME if is_light_mode else DARK_THEME
+        self.setStyleSheet(f"background-color: {theme['bg']};")
         if hasattr(self.standard_view,'setTheme'): self.standard_view.setTheme(is_light_mode)
+        if hasattr(self.race_view,'setTheme'): self.race_view.setTheme(is_light_mode)
+
     @Slot(str)
     def load_race_course(self,race_dir): self.race_view.load_course(race_dir)
     @Slot(float,float,str)

@@ -5,6 +5,7 @@ import json
 from PySide6.QtWidgets import QWidget, QLabel, QHBoxLayout, QVBoxLayout, QGridLayout
 from PySide6.QtCore import Qt, Slot, Signal, QSize, QPointF, QRectF
 from PySide6.QtGui import QFont, QPainter, QColor, QPolygonF, QBrush, QPen, QPixmap, QPainterPath
+from theme import LIGHT_THEME, DARK_THEME
 
 # --- Utility Functions ---
 def haversine_distance(lat1, lon1, lat2, lon2):
@@ -25,10 +26,20 @@ class DataWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(-15)
-        self.title_label = QLabel(title); self.title_label.setStyleSheet(f"font-family: Oxanium; font-weight: bold; font-size: {title_size}px; color: #888;")
-        self.value_label = QLabel("---"); self.value_label.setStyleSheet(f"font-family: Oxanium; font-weight: bold; font-size: {value_size}px; color: white;")
-        self.unit_label = QLabel(unit); self.unit_label.setStyleSheet(f"font-family: Oxanium; font-size: {unit_size}px; color: #888;")
-        layout.addWidget(self.title_label); layout.addWidget(self.value_label); layout.addWidget(self.unit_label)
+        self.title_label = QLabel(title)
+        self.value_label = QLabel("---")
+        self.unit_label = QLabel(unit)
+        self.title_size = title_size
+        self.value_size = value_size
+        self.unit_size = unit_size
+        layout.addWidget(self.title_label)
+        layout.addWidget(self.value_label)
+        layout.addWidget(self.unit_label)
+
+    def setTheme(self, theme):
+        self.title_label.setStyleSheet(f"font-family: Oxanium; font-weight: bold; font-size: {self.title_size}px; color: {theme['text_secondary']};")
+        self.value_label.setStyleSheet(f"font-family: Oxanium; font-weight: bold; font-size: {self.value_size}px; color: {theme['text_primary']};")
+        self.unit_label.setStyleSheet(f"font-family: Oxanium; font-size: {self.unit_size}px; color: {theme['text_secondary']};")
 
 class RaceMapWidget(QWidget):
     start_line_data_updated = Signal(float, float)
@@ -171,27 +182,57 @@ class RaceMapWidget(QWidget):
 
 class SmallArrowWidget(QWidget):
     def __init__(self, parent=None):
-        super().__init__(parent); self.angle=0; self.setFixedSize(QSize(50,50)); self.arrow_color=QColor("white")
-        self.arrow_polygon=QPolygonF([QPointF(0,-15),QPointF(10,5),QPointF(-10,5)])
+        super().__init__(parent)
+        self.angle=0
+        self.setFixedSize(QSize(63,63))
+        self.arrow_color=QColor("white")
+        self.arrow_polygon=QPolygonF([QPointF(0,-19),QPointF(13,6),QPointF(-13,6)])
+
     def setAngle(self,angle):
         if self.angle != angle: self.angle=angle; self.update()
+
     def paintEvent(self,event):
-        painter=QPainter(self); painter.setRenderHint(QPainter.Antialiasing); painter.translate(self.width()/2,self.height()/2)
-        painter.rotate(self.angle); painter.setBrush(QBrush(self.arrow_color)); painter.setPen(Qt.NoPen); painter.drawPolygon(self.arrow_polygon)
+        painter=QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.translate(self.width()/2,self.height()/2)
+        painter.rotate(self.angle)
+        painter.setBrush(QBrush(self.arrow_color))
+        painter.setPen(Qt.NoPen)
+        painter.drawPolygon(self.arrow_polygon)
 
 class BoatSpeedWidget(QWidget):
     def __init__(self):
-        super().__init__(); self.max_speed=0.0; self.min_speed=999.0; layout=QVBoxLayout(self); layout.setSpacing(0)
-        title=QLabel("BOAT SPEED (kts)"); title.setStyleSheet("font-family: Oxanium; font-size: 24px; color: #888; font-weight: bold;")
-        self.speed_label=QLabel("---"); self.speed_label.setStyleSheet("font-family: Oxanium; font-size: 110px; color: white; font-weight: bold;")
-        max_min_layout=QGridLayout(); max_min_layout.setContentsMargins(10, 0, 0, 0)
-        max_label=QLabel("Max"); max_label.setStyleSheet("font-family: Oxanium; font-size: 20px; color: #888;")
-        self.max_speed_label=QLabel("---"); self.max_speed_label.setStyleSheet("font-family: Oxanium; font-size: 36px; color: white;")
-        min_label=QLabel("Min"); min_label.setStyleSheet("font-family: Oxanium; font-size: 20px; color: #888;")
-        self.min_speed_label=QLabel("---"); self.min_speed_label.setStyleSheet("font-family: Oxanium; font-size: 36px; color: white;")
-        max_min_layout.addWidget(max_label,0,0); max_min_layout.addWidget(self.max_speed_label,1,0)
-        max_min_layout.addWidget(min_label,0,1); max_min_layout.addWidget(self.min_speed_label,1,1)
-        layout.addWidget(title); layout.addWidget(self.speed_label); layout.addLayout(max_min_layout); layout.addStretch()
+        super().__init__()
+        self.max_speed=0.0
+        self.min_speed=999.0
+        layout=QVBoxLayout(self)
+        layout.setContentsMargins(10, 0, 0, 0)
+        layout.setSpacing(0)
+        self.title=QLabel("BOAT SPEED (kts)")
+        self.speed_label=QLabel("---")
+        max_min_layout=QGridLayout()
+        max_min_layout.setContentsMargins(10, 0, 0, 0)
+        self.max_label=QLabel("Max")
+        self.max_speed_label=QLabel("---")
+        self.min_label=QLabel("Min")
+        self.min_speed_label=QLabel("---")
+        max_min_layout.addWidget(self.max_label,0,0)
+        max_min_layout.addWidget(self.max_speed_label,1,0)
+        max_min_layout.addWidget(self.min_label,0,1)
+        max_min_layout.addWidget(self.min_speed_label,1,1)
+        layout.addWidget(self.title)
+        layout.addWidget(self.speed_label)
+        layout.addLayout(max_min_layout)
+        layout.addStretch()
+
+    def setTheme(self, theme):
+        self.title.setStyleSheet(f"font-family: Oxanium; font-size: 24px; color: {theme['text_secondary']}; font-weight: bold;")
+        self.speed_label.setStyleSheet(f"font-family: Oxanium; font-size: 110px; color: {theme['text_primary']}; font-weight: bold;")
+        self.max_label.setStyleSheet(f"font-family: Oxanium; font-size: 20px; color: {theme['text_secondary']};")
+        self.max_speed_label.setStyleSheet(f"font-family: Oxanium; font-size: 36px; color: {theme['text_primary']};")
+        self.min_label.setStyleSheet(f"font-family: Oxanium; font-size: 20px; color: {theme['text_secondary']};")
+        self.min_speed_label.setStyleSheet(f"font-family: Oxanium; font-size: 36px; color: {theme['text_primary']};")
+
     @Slot(float)
     def update_speed(self, speed_knots):
         self.speed_label.setText(f"{speed_knots:.1f}")
@@ -200,22 +241,72 @@ class BoatSpeedWidget(QWidget):
 
 class RaceWindWidget(QWidget):
     def __init__(self):
-        super().__init__(); main_layout=QVBoxLayout(self); main_layout.setSpacing(0)
-        title=QLabel("WIND SPEED"); title.setStyleSheet("font-family: Oxanium; font-size: 24px; color: #888; font-weight: bold;")
-        data_layout=QHBoxLayout(); data_layout.setSpacing(5)
-        self.speed_label=QLabel("---"); self.speed_label.setStyleSheet("font-family: Oxanium; font-size: 64px; color: white; font-weight: bold;")
-        self.trend_label=QLabel("▲0"); self.trend_label.setStyleSheet("font-family: Oxanium; font-size: 24px; color: #888; font-weight: bold;")
-        direction_stack=QVBoxLayout(); direction_stack.setSpacing(0)
-        self.arrow_widget=SmallArrowWidget(); self.direction_label=QLabel("NW")
-        self.direction_label.setStyleSheet("font-family: Oxanium; font-size: 24px; color: #888; font-weight: bold;")
-        direction_stack.addWidget(self.arrow_widget,alignment=Qt.AlignCenter); direction_stack.addWidget(self.direction_label,alignment=Qt.AlignCenter)
-        data_layout.addWidget(self.speed_label); data_layout.addWidget(self.trend_label,alignment=Qt.AlignHCenter); data_layout.addStretch(); data_layout.addLayout(direction_stack)
-        main_layout.addWidget(title); main_layout.addLayout(data_layout)
+        super().__init__()
+        # Use a QGridLayout for precise cell control
+        main_layout = QGridLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(25) # Space between columns
+
+        # --- Column 0: Wind Speed Section ---
+        self.speed_title_label = QLabel("WIND SPEED")
+        
+        # Layout for the numeric speed and trend indicator
+        speed_data_layout = QHBoxLayout()
+        speed_data_layout.setContentsMargins(0,0,0,0)
+        speed_data_layout.setSpacing(5)
+        self.speed_label = QLabel("---")
+        self.trend_label = QLabel("▲0")
+        speed_data_layout.addWidget(self.speed_label)
+        speed_data_layout.addWidget(self.trend_label, alignment=Qt.AlignBottom)
+        speed_data_layout.addStretch()
+
+        # Add speed widgets to the grid
+        main_layout.addWidget(self.speed_title_label, 0, 0) # Row 0, Col 0
+        main_layout.addLayout(speed_data_layout, 1, 0)     # Row 1, Col 0
+
+        # --- Column 1: Wind Direction Section ---
+        self.wind_dir_title_label = QLabel("WIND DIR")
+        self.wind_dir_title_label.setAlignment(Qt.AlignCenter)
+        
+        # Layout for the arrow and direction letter
+        direction_data_layout = QVBoxLayout()
+        direction_data_layout.setContentsMargins(0,0,0,0)
+        direction_data_layout.setSpacing(5)
+        self.arrow_widget = SmallArrowWidget()
+        self.direction_label = QLabel("N")
+        self.direction_label.setAlignment(Qt.AlignCenter)
+        direction_data_layout.addWidget(self.arrow_widget, alignment=Qt.AlignCenter)
+        direction_data_layout.addWidget(self.direction_label)
+
+        # Add direction widgets to the grid
+        main_layout.addWidget(self.wind_dir_title_label, 0, 1, alignment=Qt.AlignCenter) # Row 0, Col 1
+        main_layout.addLayout(direction_data_layout, 1, 1, alignment=Qt.AlignTop)      # Row 1, Col 1
+
+        # --- Final layout adjustments ---
+        main_layout.setRowStretch(2, 1)      # Pushes everything to the top
+        main_layout.setColumnStretch(1, 1)   # Allows column 1 to expand slightly
+
+    def setTheme(self, theme):
+        # Apply stylesheets for precise styling
+        self.speed_title_label.setStyleSheet(f"font-family: Oxanium; font-size: 24px; color: {theme['text_secondary']}; font-weight: bold;")
+        self.speed_label.setStyleSheet(f"font-family: Oxanium; font-size: 64px; color: {theme['text_primary']}; font-weight: bold;")
+        self.trend_label.setStyleSheet(f"font-family: Oxanium; font-size: 24px; color: {theme['text_secondary']}; font-weight: bold; padding-bottom: 5px;")
+        
+        self.wind_dir_title_label.setStyleSheet(f"font-family: Oxanium; font-size: 24px; color: {theme['text_secondary']}; font-weight: bold;")
+        self.direction_label.setStyleSheet(f"font-family: Oxanium; font-size: 24px; color: {theme['text_secondary']}; font-weight: bold;")
+        
+        self.arrow_widget.arrow_color = QColor(theme['arrow'])
+        self.arrow_widget.update()
+
     @Slot(float,float)
     def update_wind(self,speed_mps,angle_rad):
-        speed_knots=speed_mps*1.94384; angle_deg=math.degrees(angle_rad)
-        dirs=["N","NE","E","SE","S","SW","W","NW"]; idx=round(angle_deg/45)%8
-        self.speed_label.setText(f"{speed_knots:.0f}"); self.direction_label.setText(dirs[idx]); self.arrow_widget.setAngle(angle_deg)
+        speed_knots=speed_mps*1.94384
+        angle_deg=math.degrees(angle_rad)
+        dirs=["N","NE","E","SE","S","SW","W","NW"]
+        idx=round(angle_deg/45)%8
+        self.speed_label.setText(f"{speed_knots:.0f}")
+        self.direction_label.setText(dirs[idx])
+        self.arrow_widget.setAngle(angle_deg)
 
 class RaceViewWidget(QWidget):
     def __init__(self):
@@ -228,8 +319,6 @@ class RaceViewWidget(QWidget):
         
         self.map_widget = RaceMapWidget()
         
-        # --- THIS IS THE MODIFIED PART ---
-        # Create smaller data widgets for the start line info
         self.dist_to_start_widget = DataWidget("DIST TO START", "ft", title_size=20, value_size=36, unit_size=20)
         self.eta_to_start_widget = DataWidget("ETA TO START", "s", title_size=20, value_size=36, unit_size=20)
         
@@ -239,7 +328,6 @@ class RaceViewWidget(QWidget):
         self.boat_speed_widget = BoatSpeedWidget()
         self.wind_widget = RaceWindWidget()
         
-        # Create a grid layout for the new widgets
         start_line_layout = QGridLayout()
         start_line_layout.addWidget(self.dist_to_start_widget, 0, 0)
         start_line_layout.addWidget(self.eta_to_start_widget, 0, 1)
@@ -247,7 +335,6 @@ class RaceViewWidget(QWidget):
         data_layout.addStretch()
         data_layout.addWidget(self.boat_speed_widget)
         data_layout.addStretch(1)
-        # Add the grid layout to the main vertical layout
         data_layout.addLayout(start_line_layout)
         data_layout.addStretch(1)
         data_layout.addWidget(self.wind_widget)
@@ -255,6 +342,15 @@ class RaceViewWidget(QWidget):
 
         main_layout.addWidget(self.map_widget, 2); main_layout.addLayout(data_layout, 1)
         self.map_widget.start_line_data_updated.connect(self.update_start_line_display)
+        self.setTheme(False)
+
+    @Slot(bool)
+    def setTheme(self, is_light_mode):
+        theme = LIGHT_THEME if is_light_mode else DARK_THEME
+        self.dist_to_start_widget.setTheme(theme)
+        self.eta_to_start_widget.setTheme(theme)
+        self.boat_speed_widget.setTheme(theme)
+        self.wind_widget.setTheme(theme)
 
     def load_shared_data(self):
         map_path = os.path.join(self.races_base_path, "shared_map.png")

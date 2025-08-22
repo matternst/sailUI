@@ -237,8 +237,8 @@ class DashboardUI(QWidget):
         header.setSectionResizeMode(QHeaderView.Stretch)
         header.setDefaultAlignment(Qt.AlignLeft)
         for i in range(self.log_table.columnCount()):
-            self.log_table.setColumnWidth(i, 150) # Adjust as needed
-        self.log_table.setColumnWidth(1, 200) # Date column
+            self.log_table.setColumnWidth(i, 125) # Adjust as needed
+        self.log_table.setColumnWidth(1, 250) # Date column
         self.log_table.verticalHeader().setVisible(False)
         self.log_table.verticalHeader().setDefaultSectionSize(40) # Increased row height
         self.log_table.setSelectionBehavior(QTableWidget.SelectRows)

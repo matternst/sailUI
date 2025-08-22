@@ -11,3 +11,4 @@ venv/
 .vscode/ # If using VS Code and want to ignore its settings
 *.log
 *.db
+login_info.txt

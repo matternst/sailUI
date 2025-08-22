@@ -573,3 +573,73 @@ Run the main application:
 Bash
 python main_app.py
 Your dashboard_ui should appear on your primary monitor, and the sail_ui should now be displayed on your new e-ink monitor, updating every 5 seconds.
+
+
+
+
+********** ********** ********** ********** ********** ********** 
+
+
+
+********** Raspberry Pi 7.5-inch e-Paper HAT Setup Guide ********** ********** 
+A complete list of commands to set up the Waveshare 7.5-inch e-Paper HAT on a fresh Raspberry Pi OS installation.
+
+Step 1: Enable SPI Interface
+This opens the Raspberry Pi configuration tool to enable the SPI hardware interface, which is required for the display to communicate with the Pi. A reboot is necessary for the changes to take effect.
+
+BASH:
+
+sudo raspi-config
+
+(Navigate to Interfacing Options > SPI > Yes, then finish and reboot)
+
+Step 2: Install Git
+Installs the git version control system, which is needed to download software from GitHub repositories.
+
+BASH:
+
+sudo apt-get update && sudo apt-get install git -y
+
+Step 3: Install BCM2835 Library
+Downloads and installs the BCM2835 C library, which provides low-level access to the Raspberry Pi's GPIO pins.
+
+BASH:
+
+wget [http://www.airspayce.com/mikem/bcm2835/bcm2835-1.71.tar.gz](http://www.airspayce.com/mikem/bcm2835/bcm2835-1.71.tar.gz)
+tar zxvf bcm2835-1.71.tar.gz
+cd bcm2835-1.71/
+sudo ./configure && sudo make && sudo make check && sudo make install
+cd ..
+
+Step 4: Install WiringPi Library
+Downloads the source code for the (deprecated but still necessary) WiringPi library and builds it from source.
+
+BASH:
+
+git clone [https://github.com/WiringPi/WiringPi](https://github.com/WiringPi/WiringPi)
+cd WiringPi
+./build
+cd ..
+
+Step 5: Install lgpio Library
+Installs the lgpio development library using the apt package manager. This was a missing dependency required for the Waveshare code to compile correctly.
+
+BASH:
+
+sudo apt-get install liblgpio-dev -y
+
+Step 6: Download Waveshare Demo Code
+Clones the official Waveshare e-Paper repository from GitHub, which contains the example code needed to test the display.
+
+BASH:
+
+git clone [https://github.com/waveshare/e-Paper.git](https://github.com/waveshare/e-Paper.git)
+
+Step 7: Compile and Run the Test Demo
+Navigates into the C examples directory, cleans any previous build attempts, and compiles the code specifically for the 7.5-inch V2 e-Paper model. Finally, it runs the compiled program to display the demo.
+
+BASH:
+
+cd e-Paper/RaspberryPi_JetsonNano/c
+sudo make clean && sudo make EPD=epd7in5V2
+sudo ./epd
