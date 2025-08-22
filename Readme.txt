@@ -38,6 +38,10 @@ Bash:
 python main_app.py
 
 
+Deactivate the venv
+BASH: deactivate
+
+
 
 - - - - - - - - - - - - - - - - - - - - - - - 
 

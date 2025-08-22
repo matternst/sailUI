@@ -14,12 +14,20 @@ class SailUI(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Sail UI Display"); self.setGeometry(100,100,1024,600)
-        self.main_layout=QVBoxLayout(self); self.main_layout.setContentsMargins(0,0,0,0)
-        self.standard_view=StandardSailView(); self.no_wind_arrow_view=NoWindArrowView(); self.race_view=RaceViewWidget()
-        self.stacked_widget=QStackedWidget(); self.stacked_widget.addWidget(self.standard_view)
-        self.stacked_widget.addWidget(self.no_wind_arrow_view); self.stacked_widget.addWidget(self.race_view)
-        self.main_layout.addWidget(self.stacked_widget); self.setTheme(False)
+        self.setWindowTitle("Sail UI Display")
+        # --- THIS LINE HAS BEEN CHANGED ---
+        self.setGeometry(100, 100, 800, 480)
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
+        self.standard_view = StandardSailView()
+        self.no_wind_arrow_view = NoWindArrowView()
+        self.race_view = RaceViewWidget()
+        self.stacked_widget = QStackedWidget()
+        self.stacked_widget.addWidget(self.standard_view)
+        self.stacked_widget.addWidget(self.no_wind_arrow_view)
+        self.stacked_widget.addWidget(self.race_view)
+        self.main_layout.addWidget(self.stacked_widget)
+        self.setTheme(False)
 
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() == Qt.Key.Key_B and not event.isAutoRepeat(): self.show_test_banner_requested.emit()
